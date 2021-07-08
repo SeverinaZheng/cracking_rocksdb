@@ -264,7 +264,7 @@ class Compaction {
   bool IsOutputLevelEmpty() const;
 
   // Should this compaction be broken up into smaller ones run in parallel?
-  bool ShouldFormSubcompactions() const;
+  bool ShouldFormSubcompactions(std::vector<Slice> endpoints_list_) const;
 
   // test function to validate the functionality of IsBottommostLevel()
   // function -- determines if compaction with inputs and storage is bottommost

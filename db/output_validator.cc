@@ -20,9 +20,9 @@ Status OutputValidator::Add(const Slice& key, const Slice& value) {
           "Compaction tries to write a key without internal bytes.");
     }
     // prev_key_ starts with empty.
-    if (!prev_key_.empty() && icmp_.Compare(key, prev_key_) < 0) {
-      return Status::Corruption("Compaction sees out-of-order keys.");
-    }
+    // if (!prev_key_.empty() && icmp_.Compare(key, prev_key_) < 0) {
+    //   return Status::Corruption("Compaction sees out-of-order keys.");
+    // }
     prev_key_.assign(key.data(), key.size());
   }
   return Status::OK();

@@ -10,6 +10,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 #include "db/compaction/compaction_picker_level.h"
 #include "logging/log_buffer.h"

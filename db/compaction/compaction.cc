@@ -559,18 +559,21 @@ bool Compaction::IsOutputLevelEmpty() const {
   return inputs_.back().level != output_level_ || inputs_.back().empty();
 }
 
-bool Compaction::ShouldFormSubcompactions() const {
-  if (max_subcompactions_ <= 1 || cfd_ == nullptr) {
-    return false;
-  }
-  if (cfd_->ioptions()->compaction_style == kCompactionStyleLevel) {
-    return (start_level_ == 0 || is_manual_compaction_) && output_level_ > 0 &&
-           !IsOutputLevelEmpty();
-  } else if (cfd_->ioptions()->compaction_style == kCompactionStyleUniversal) {
-    return number_levels_ > 1 && output_level_ > 0;
-  } else {
-    return false;
-  }
+bool Compaction::ShouldFormSubcompactions(std::vector<Slice> endpoints_list_) const {
+  // if (max_subcompactions_ <= 1 || cfd_ == nullptr) {
+  //   return false;
+  // }
+  // if (cfd_->ioptions()->compaction_style == kCompactionStyleLevel) {
+  //   return (start_level_ == 0 || is_manual_compaction_) && output_level_ > 0 &&
+  //          !IsOutputLevelEmpty();
+  // } else if (cfd_->ioptions()->compaction_style == kCompactionStyleUniversal) {
+  //   return number_levels_ > 1 && output_level_ > 0;
+  // } else {
+  //   return false;
+  // }
+  if(endpoints_list_.size()>0)
+    return true;
+  return false;
 }
 
 uint64_t Compaction::MinInputFileOldestAncesterTime() const {

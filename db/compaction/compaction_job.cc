@@ -19,6 +19,8 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <iostream>
+#include <string>
 
 #include "db/blob/blob_file_addition.h"
 #include "db/blob/blob_file_builder.h"
@@ -356,12 +358,32 @@ CompactionJob::CompactionJob(
       blob_callback_(blob_callback) {
   assert(compaction_job_stats_ != nullptr);
   assert(log_buffer_ != nullptr);
+
   const auto* cfd = compact_->compaction->column_family_data();
   ThreadStatusUtil::SetColumnFamily(cfd, cfd->ioptions()->env,
                                     db_options_.enable_thread_tracking);
   ThreadStatusUtil::SetThreadOperation(ThreadStatus::OP_COMPACTION);
   ReportStartedCompaction(compaction);
 }
+
+std::vector<Slice> CompactionJob::GetEndPointsList(){
+    const std::vector<CompactionInputFiles>& inputs =
+        *(compact_->compaction->inputs());
+
+    std::vector<Slice> endpoints_list;
+    for(auto files_per_level : inputs)
+    {
+      for(auto files : files_per_level.files)
+      {
+        std::vector<Slice> endpoints=files->endpoint_list;
+        for(size_t k=0;k<endpoints.size();k++)
+        {
+          endpoints_list.push_back(endpoints[k]);
+        }
+      }
+    }
+    return endpoints_list;
+  }
 
 CompactionJob::~CompactionJob() {
   assert(compact_ == nullptr);
@@ -425,14 +447,14 @@ void CompactionJob::Prepare() {
       c->column_family_data()->CalculateSSTWriteHint(c->output_level());
   bottommost_level_ = c->bottommost_level();
 
-  if (c->ShouldFormSubcompactions()) {
+  if (c->ShouldFormSubcompactions(GetEndPointsList())) {
     {
-      StopWatch sw(db_options_.clock, stats_, SUBCOMPACTION_SETUP_TIME);
+      // StopWatch sw(db_options_.clock, stats_, SUBCOMPACTION_SETUP_TIME);
       GenSubcompactionBoundaries();
     }
     assert(sizes_.size() == boundaries_.size() + 1);
 
-    for (size_t i = 0; i <= boundaries_.size(); i++) {
+    for (size_t i = 1; i < boundaries_.size(); i++) {
       Slice* start = i == 0 ? nullptr : &boundaries_[i - 1];
       Slice* end = i == boundaries_.size() ? nullptr : &boundaries_[i];
       compact_->sub_compact_states.emplace_back(c, start, end, sizes_[i]);
@@ -448,140 +470,106 @@ void CompactionJob::Prepare() {
   }
 }
 
-struct RangeWithSize {
-  Range range;
-  uint64_t size;
-
-  RangeWithSize(const Slice& a, const Slice& b, uint64_t s = 0)
-      : range(a, b), size(s) {}
-};
-
 void CompactionJob::GenSubcompactionBoundaries() {
   auto* c = compact_->compaction;
   auto* cfd = c->column_family_data();
   const Comparator* cfd_comparator = cfd->user_comparator();
-  std::vector<Slice> bounds;
+
   int start_lvl = c->start_level();
   int out_lvl = c->output_level();
 
-  // Add the starting and/or ending key of certain input files as a potential
-  // boundary
-  for (size_t lvl_idx = 0; lvl_idx < c->num_input_levels(); lvl_idx++) {
-    int lvl = c->level(lvl_idx);
-    if (lvl >= start_lvl && lvl <= out_lvl) {
-      const LevelFilesBrief* flevel = c->input_levels(lvl_idx);
-      size_t num_files = flevel->num_files;
+  std::vector<Slice> endpoints_list=GetEndPointsList();
 
-      if (num_files == 0) {
-        continue;
-      }
+  // Add the starting and ending key of each file to endpoints_list if it is empty
+  if(endpoints_list.size()==0)
+  {
+    for (size_t lvl_idx = 0; lvl_idx < c->num_input_levels(); lvl_idx++) {
+      int lvl = c->level(lvl_idx);
+      if (lvl >= start_lvl && lvl <= out_lvl) {
+        const LevelFilesBrief* flevel = c->input_levels(lvl_idx);
+        size_t num_files = flevel->num_files;
 
-      if (lvl == 0) {
-        // For level 0 add the starting and ending key of each file since the
-        // files may have greatly differing key ranges (not range-partitioned)
-        for (size_t i = 0; i < num_files; i++) {
-          bounds.emplace_back(flevel->files[i].smallest_key);
-          bounds.emplace_back(flevel->files[i].largest_key);
+        if (num_files == 0) {
+          continue;
         }
-      } else {
-        // For all other levels add the smallest/largest key in the level to
-        // encompass the range covered by that level
-        bounds.emplace_back(flevel->files[0].smallest_key);
-        bounds.emplace_back(flevel->files[num_files - 1].largest_key);
-        if (lvl == out_lvl) {
-          // For the last level include the starting keys of all files since
-          // the last level is the largest and probably has the widest key
-          // range. Since it's range partitioned, the ending key of one file
-          // and the starting key of the next are very close (or identical).
-          for (size_t i = 1; i < num_files; i++) {
-            bounds.emplace_back(flevel->files[i].smallest_key);
-          }
+        for (size_t i = 0; i < num_files; i++) {
+          endpoints_list.emplace_back(flevel->files[i].smallest_key);
+          endpoints_list.emplace_back(flevel->files[i].largest_key);
         }
       }
     }
   }
+  else
+  {
+    for(size_t i=0;i<endpoints_list.size();i++)
+    {
+      endpoints_list[i].remove_prefix(1);
+    }
+  }
 
-  std::sort(bounds.begin(), bounds.end(),
+  //ensure the endpoints are sorted since they will be a mix of endpoints from different files from different levels
+  std::sort(endpoints_list.begin(), endpoints_list.end(),
             [cfd_comparator](const Slice& a, const Slice& b) -> bool {
               return cfd_comparator->Compare(ExtractUserKey(a),
                                              ExtractUserKey(b)) < 0;
             });
-  // Remove duplicated entries from bounds
-  bounds.erase(
-      std::unique(bounds.begin(), bounds.end(),
+  // Remove duplicated entries from endpoints
+  endpoints_list.erase(
+      std::unique(endpoints_list.begin(), endpoints_list.end(),
                   [cfd_comparator](const Slice& a, const Slice& b) -> bool {
                     return cfd_comparator->Compare(ExtractUserKey(a),
                                                    ExtractUserKey(b)) == 0;
                   }),
-      bounds.end());
+      endpoints_list.end());
 
-  // Combine consecutive pairs of boundaries into ranges with an approximate
+  // Combine consecutive pairs of endpoints into ranges with an approximate
   // size of data covered by keys in that range
   uint64_t sum = 0;
-  std::vector<RangeWithSize> ranges;
   // Get input version from CompactionState since it's already referenced
   // earlier in SetInputVersioCompaction::SetInputVersion and will not change
   // when db_mutex_ is released below
   auto* v = compact_->compaction->input_version();
-  for (auto it = bounds.begin();;) {
-    const Slice a = *it;
-    ++it;
 
-    if (it == bounds.end()) {
-      break;
+  if(endpoints_list.size()!=0)
+  {
+    for (auto it = endpoints_list.begin();;) {
+      Slice a = *it;;
+      ++it;
+      if (it == endpoints_list.end()) {
+        break;
+      }
+      Slice b = *it;
+      // ApproximateSize could potentially create table reader iterator to seek
+      // to the index block and may incur I/O cost in the process. Unlock db
+      // mutex to reduce contention
+      db_mutex_->Unlock();
+      uint64_t size = versions_->ApproximateSize(SizeApproximationOptions(), v, a,
+                                                b, start_lvl, out_lvl + 1,
+                                                TableReaderCaller::kCompaction);
+      db_mutex_->Lock();
+      ranges.emplace_back(a, b, size);
+      sum += size;
     }
-
-    const Slice b = *it;
-
-    // ApproximateSize could potentially create table reader iterator to seek
-    // to the index block and may incur I/O cost in the process. Unlock db
-    // mutex to reduce contention
-    db_mutex_->Unlock();
-    uint64_t size = versions_->ApproximateSize(SizeApproximationOptions(), v, a,
-                                               b, start_lvl, out_lvl + 1,
-                                               TableReaderCaller::kCompaction);
-    db_mutex_->Lock();
-    ranges.emplace_back(a, b, size);
-    sum += size;
   }
 
-  // Group the ranges into subcompactions
-  const double min_file_fill_percent = 4.0 / 5;
-  int base_level = v->storage_info()->base_level();
-  uint64_t max_output_files = static_cast<uint64_t>(std::ceil(
-      sum / min_file_fill_percent /
-      MaxFileSizeForLevel(*(c->mutable_cf_options()), out_lvl,
-          c->immutable_cf_options()->compaction_style, base_level,
-          c->immutable_cf_options()->level_compaction_dynamic_level_bytes)));
-  uint64_t subcompactions =
-      std::min({static_cast<uint64_t>(ranges.size()),
-                static_cast<uint64_t>(c->max_subcompactions()),
-                max_output_files});
+  uint64_t size;
 
-  if (subcompactions > 1) {
-    double mean = sum * 1.0 / subcompactions;
-    // Greedily add ranges to the subcompaction until the sum of the ranges'
-    // sizes becomes >= the expected mean size of a subcompaction
-    sum = 0;
-    for (size_t i = 0; i + 1 < ranges.size(); i++) {
-      sum += ranges[i].size;
-      if (subcompactions == 1) {
-        // If there's only one left to schedule then it goes to the end so no
-        // need to put an end boundary
-        continue;
-      }
-      if (sum >= mean) {
-        boundaries_.emplace_back(ExtractUserKey(ranges[i].range.limit));
-        sizes_.emplace_back(sum);
-        subcompactions--;
-        sum = 0;
-      }
+  // add each range to the subcompaction
+  size = 0;
+  for (size_t i = 0; i < ranges.size(); i++) {
+    size = ranges[i].size;
+    if(i==0)
+    {
+      boundaries_.emplace_back(ranges[i].range.start);
+      sizes_.emplace_back(size);
+      size = 0;
     }
-    sizes_.emplace_back(sum + ranges.back().size);
-  } else {
-    // Only one range so its size is the total sum of sizes computed above
-    sizes_.emplace_back(sum);
+    boundaries_.emplace_back(ranges[i].range.limit);
+    sizes_.emplace_back(size);
+    size = 0;
   }
+  if(ranges.size()!=0)
+  sizes_.emplace_back(size + ranges.back().size);
 }
 
 Status CompactionJob::Run() {
@@ -598,19 +586,24 @@ Status CompactionJob::Run() {
   // Launch a thread for each of subcompactions 1...num_threads-1
   std::vector<port::Thread> thread_pool;
   thread_pool.reserve(num_threads - 1);
-  for (size_t i = 1; i < compact_->sub_compact_states.size(); i++) {
+
+  for (size_t i = 0; i < compact_->sub_compact_states.size(); i++) {
     thread_pool.emplace_back(&CompactionJob::ProcessKeyValueCompaction, this,
                              &compact_->sub_compact_states[i]);
   }
 
   // Always schedule the first subcompaction (whether or not there are also
   // others) in the current thread to be efficient with resources
-  ProcessKeyValueCompaction(&compact_->sub_compact_states[0]);
+
+  // GenSubcompactionBoundaries();
+  // for (size_t i = 0; i < ranges.size(); i++) {
+  //   ProcessKeyValueCompactionWithEndPoints(&compact_->sub_compact_states[i], ranges[i].range.start, ranges[i].range.limit);
+  // }
 
   // Wait for all other threads (if there are any) to finish execution
-  for (auto& thread : thread_pool) {
-    thread.join();
-  }
+  // for (auto& thread : thread_pool) {
+    // thread.join();
+  // }
 
   compaction_stats_.micros = db_options_.clock->NowMicros() - start_micros;
   compaction_stats_.cpu_micros = 0;
@@ -664,7 +657,7 @@ Status CompactionJob::Run() {
     status = io_s;
   }
   if (status.ok()) {
-    thread_pool.clear();
+    // thread_pool.clear();
     std::vector<const CompactionJob::SubcompactionState::Output*> files_output;
     for (const auto& state : compact_->sub_compact_states) {
       for (const auto& output : state.outputs) {
@@ -703,7 +696,6 @@ Status CompactionJob::Run() {
             /*largest_compaction_key=*/nullptr,
             /*allow_unprepared_value=*/false);
         auto s = iter->status();
-
         if (s.ok() && paranoid_file_checks_) {
           OutputValidator validator(cfd->internal_comparator(),
                                     /*_enable_order_check=*/true,
@@ -746,7 +738,6 @@ Status CompactionJob::Run() {
       }
     }
   }
-
   TablePropertiesCollection tp;
   for (const auto& state : compact_->sub_compact_states) {
     for (const auto& output : state.outputs) {
@@ -757,11 +748,8 @@ Status CompactionJob::Run() {
     }
   }
   compact_->compaction->SetOutputTableProperties(std::move(tp));
-
-  // Finish up all book-keeping to unify the subcompaction results
   AggregateStatistics();
   UpdateCompactionStats();
-
   RecordCompactionIOStats();
   LogFlush(db_options_.info_log);
   TEST_SYNC_POINT("CompactionJob::Run():End");
@@ -775,7 +763,7 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
 
   AutoThreadOperationStageUpdater stage_updater(
       ThreadStatus::STAGE_COMPACTION_INSTALL);
-  db_mutex_->AssertHeld();
+  // db_mutex_->AssertHeld();
   Status status = compact_->status;
 
   ColumnFamilyData* cfd = compact_->compaction->column_family_data();
@@ -917,6 +905,7 @@ void CompactionJob::ProcessKeyValueCompactionWithCompactionService(
 
   const std::vector<CompactionInputFiles>& inputs =
       *(compact_->compaction->inputs());
+
   for (const auto& files_per_level : inputs) {
     for (const auto& file : files_per_level.files) {
       compaction_input.input_files.emplace_back(
@@ -1050,6 +1039,336 @@ void CompactionJob::ProcessKeyValueCompactionWithCompactionService(
   IOSTATS_ADD(bytes_read, compaction_result.bytes_read);
 }
 #endif  // !ROCKSDB_LITE
+
+void CompactionJob::ProcessKeyValueCompactionWithEndPoints(SubcompactionState* sub_compact, Slice& start, Slice& end) {
+
+  assert(sub_compact);
+  assert(compact_);
+
+  //get the exact key by removing the additional 8 bit prefix
+
+  uint64_t prev_cpu_micros = db_options_.clock->CPUNanos() / 1000;
+
+  ColumnFamilyData* cfd = compact_->compaction->column_family_data();
+
+  // Create compaction filter and fail the compaction if
+  // IgnoreSnapshots() = false because it is not supported anymore
+  const CompactionFilter* compaction_filter =
+      cfd->ioptions()->compaction_filter;
+  std::unique_ptr<CompactionFilter> compaction_filter_from_factory = nullptr;
+  if (compaction_filter == nullptr) {
+    compaction_filter_from_factory =
+        compact_->compaction->CreateCompactionFilter();
+    compaction_filter = compaction_filter_from_factory.get();
+  }
+  if (compaction_filter != nullptr && !compaction_filter->IgnoreSnapshots()) {
+    sub_compact->status = Status::NotSupported(
+        "CompactionFilter::IgnoreSnapshots() = false is not supported "
+        "anymore.");
+    return;
+  }
+
+  CompactionRangeDelAggregator range_del_agg(&cfd->internal_comparator(),
+                                             existing_snapshots_);
+  ReadOptions read_options;
+  read_options.verify_checksums = true;
+  read_options.fill_cache = false;
+  // Compaction iterators shouldn't be confined to a single prefix.
+  // Compactions use Seek() for
+  // (a) concurrent compactions,
+  // (b) CompactionFilter::Decision::kRemoveAndSkipUntil.
+  read_options.total_order_seek = true;
+
+  // Although the v2 aggregator is what the level iterator(s) know about,
+  // the AddTombstones calls will be propagated down to the v1 aggregator.
+  std::unique_ptr<InternalIterator> input(
+      versions_->MakeInputIterator(read_options, compact_->compaction,
+                                   &range_del_agg, file_options_for_read_));
+
+  AutoThreadOperationStageUpdater stage_updater(
+      ThreadStatus::STAGE_COMPACTION_PROCESS_KV);
+
+  // I/O measurement variables
+  PerfLevel prev_perf_level = PerfLevel::kEnableTime;
+  const uint64_t kRecordStatsEvery = 1000;
+  uint64_t prev_write_nanos = 0;
+  uint64_t prev_fsync_nanos = 0;
+  uint64_t prev_range_sync_nanos = 0;
+  uint64_t prev_prepare_write_nanos = 0;
+  uint64_t prev_cpu_write_nanos = 0;
+  uint64_t prev_cpu_read_nanos = 0;
+  if (measure_io_stats_) {
+    prev_perf_level = GetPerfLevel();
+    SetPerfLevel(PerfLevel::kEnableTimeAndCPUTimeExceptForMutex);
+    prev_write_nanos = IOSTATS(write_nanos);
+    prev_fsync_nanos = IOSTATS(fsync_nanos);
+    prev_range_sync_nanos = IOSTATS(range_sync_nanos);
+    prev_prepare_write_nanos = IOSTATS(prepare_write_nanos);
+    prev_cpu_write_nanos = IOSTATS(cpu_write_nanos);
+    prev_cpu_read_nanos = IOSTATS(cpu_read_nanos);
+  }
+  MergeHelper merge(
+      env_, cfd->user_comparator(), cfd->ioptions()->merge_operator.get(),
+      compaction_filter, db_options_.info_log.get(),
+      false /* internal key corruption is expected */,
+      existing_snapshots_.empty() ? 0 : existing_snapshots_.back(),
+      snapshot_checker_, compact_->compaction->level(), db_options_.stats);
+
+  const MutableCFOptions* mutable_cf_options =
+      compact_->compaction->mutable_cf_options();
+  assert(mutable_cf_options);
+
+  std::vector<std::string> blob_file_paths;
+
+  std::unique_ptr<BlobFileBuilder> blob_file_builder(
+      mutable_cf_options->enable_blob_files
+          ? new BlobFileBuilder(versions_, fs_.get(),
+                                compact_->compaction->immutable_cf_options(),
+                                mutable_cf_options, &file_options_, job_id_,
+                                cfd->GetID(), cfd->GetName(),
+                                Env::IOPriority::IO_LOW, write_hint_,
+                                io_tracer_, blob_callback_, &blob_file_paths,
+                                &sub_compact->blob_file_additions)
+          : nullptr);
+
+  TEST_SYNC_POINT("CompactionJob::Run():Inprogress");
+  TEST_SYNC_POINT_CALLBACK(
+      "CompactionJob::Run():PausingManualCompaction:1",
+      reinterpret_cast<void*>(
+          const_cast<std::atomic<int>*>(manual_compaction_paused_)));
+ 
+  input->SeekToFirst();
+
+  Status status;
+  const std::string* const full_history_ts_low =
+      full_history_ts_low_.empty() ? nullptr : &full_history_ts_low_;
+      
+  sub_compact->c_iter.reset(new CompactionIterator(
+      input.get(), cfd->user_comparator(), &merge, versions_->LastSequence(),
+      &existing_snapshots_, earliest_write_conflict_snapshot_,
+      snapshot_checker_, env_, ShouldReportDetailedTime(env_, stats_),
+      /*expect_valid_internal_key=*/true, &range_del_agg,
+      blob_file_builder.get(), db_options_.allow_data_in_errors,
+      compact_->compaction, compaction_filter, shutting_down_,
+      preserve_deletes_seqnum_, manual_compaction_paused_, db_options_.info_log,
+      full_history_ts_low));
+      
+  auto c_iter = sub_compact->c_iter.get();
+
+  c_iter->SeekToFirst();
+  if (c_iter->Valid() && compact_->compaction->output_level() != 0) {
+    // ShouldStopBefore() maintains state based on keys processed so far. The
+    // compaction loop always calls it on the "next" key, thus won't tell it the
+    // first key. So we do that here.
+    sub_compact->ShouldStopBefore(c_iter->key(),
+                                  sub_compact->current_output_file_size);
+  }
+  const auto& c_iter_stats = c_iter->iter_stats();
+  std::unique_ptr<SstPartitioner> partitioner =
+      compact_->compaction->output_level() == 0
+          ? nullptr
+          : compact_->compaction->CreateSstPartitioner();
+  std::string last_key_for_partitioner;
+
+  while (status.ok() && !cfd->IsDropped() && c_iter->Valid()) {
+    // Invariant: c_iter.status() is guaranteed to be OK if c_iter->Valid()
+    // returns true.
+    const Slice& key = c_iter->key();
+    const Slice& value = c_iter->value();
+    // If an end key (exclusive) is specified, check if the current key is
+    // >= than it and exit if it is because the iterator is out of its range
+    if ((end != nullptr && cfd->user_comparator()->Compare(c_iter->user_key(), end)>=0)||(start!=nullptr && cfd->user_comparator()->Compare(c_iter->user_key(), start)<0)) {
+      c_iter->Next();
+      continue;
+    }
+    if (c_iter_stats.num_input_records % kRecordStatsEvery ==
+        kRecordStatsEvery - 1) {
+      RecordDroppedKeys(c_iter_stats, &sub_compact->compaction_job_stats);
+      c_iter->ResetRecordCounts();
+      RecordCompactionIOStats();
+    }
+
+    // Open output file if necessary
+    if (sub_compact->builder == nullptr) {
+      status = OpenCompactionOutputFile(sub_compact);
+      if (!status.ok()) {
+        break;
+      }
+    }
+
+    status = sub_compact->AddToBuilder(key, value);
+    if (!status.ok()) {
+      break;
+    }
+
+    sub_compact->current_output_file_size =
+        sub_compact->builder->EstimatedFileSize();
+    const ParsedInternalKey& ikey = c_iter->ikey();
+    sub_compact->current_output()->meta.UpdateBoundaries(
+        key, value, ikey.sequence, ikey.type);
+    sub_compact->num_output_records++;
+
+    // Close output file if it is big enough. Two possibilities determine it's
+    // time to close it: (1) the current key should be this file's last key, (2)
+    // the next key should not be in this file.
+    //
+    // TODO(aekmekji): determine if file should be closed earlier than this
+    // during subcompactions (i.e. if output size, estimated by input size, is
+    // going to be 1.2MB and max_output_file_size = 1MB, prefer to have 0.6MB
+    // and 0.6MB instead of 1MB and 0.2MB)
+    bool output_file_ended = false;
+    if (compact_->compaction->output_level() != 0 &&
+        sub_compact->current_output_file_size >=
+            compact_->compaction->max_output_file_size()) {
+      // (1) this key terminates the file. For historical reasons, the iterator
+      // status before advancing will be given to FinishCompactionOutputFile().
+      output_file_ended = true;
+    }
+    TEST_SYNC_POINT_CALLBACK(
+        "CompactionJob::Run():PausingManualCompaction:2",
+        reinterpret_cast<void*>(
+            const_cast<std::atomic<int>*>(manual_compaction_paused_)));
+    if (partitioner.get()) {
+      last_key_for_partitioner.assign(c_iter->user_key().data_,
+                                      c_iter->user_key().size_);
+    }
+    c_iter->Next();
+    if (c_iter->status().IsManualCompactionPaused()) {
+      break;
+    }
+    if (!output_file_ended && c_iter->Valid()) {
+      if (((partitioner.get() &&
+            partitioner->ShouldPartition(PartitionerRequest(
+                last_key_for_partitioner, c_iter->user_key(),
+                sub_compact->current_output_file_size)) == kRequired) ||
+           (compact_->compaction->output_level() != 0 &&
+            sub_compact->ShouldStopBefore(
+                c_iter->key(), sub_compact->current_output_file_size))) &&
+          sub_compact->builder != nullptr) {
+        // (2) this key belongs to the next file. For historical reasons, the
+        // iterator status after advancing will be given to
+        // FinishCompactionOutputFile().
+        output_file_ended = true;
+      }
+    }
+    if (output_file_ended) {
+      const Slice* next_key = nullptr;
+      if (c_iter->Valid()) {
+        next_key = &c_iter->key();
+      }
+      CompactionIterationStats range_del_out_stats;
+      status = FinishCompactionOutputFile(input->status(), sub_compact,
+                                          &range_del_agg, &range_del_out_stats,
+                                          next_key);
+      RecordDroppedKeys(range_del_out_stats,
+                        &sub_compact->compaction_job_stats);
+    }
+  }
+
+  sub_compact->compaction_job_stats.num_blobs_read =
+      c_iter_stats.num_blobs_read;
+  sub_compact->compaction_job_stats.total_blob_bytes_read =
+      c_iter_stats.total_blob_bytes_read;
+  sub_compact->compaction_job_stats.num_input_deletion_records =
+      c_iter_stats.num_input_deletion_records;
+  sub_compact->compaction_job_stats.num_corrupt_keys =
+      c_iter_stats.num_input_corrupt_records;
+  sub_compact->compaction_job_stats.num_single_del_fallthru =
+      c_iter_stats.num_single_del_fallthru;
+  sub_compact->compaction_job_stats.num_single_del_mismatch =
+      c_iter_stats.num_single_del_mismatch;
+  sub_compact->compaction_job_stats.total_input_raw_key_bytes +=
+      c_iter_stats.total_input_raw_key_bytes;
+  sub_compact->compaction_job_stats.total_input_raw_value_bytes +=
+      c_iter_stats.total_input_raw_value_bytes;
+
+  RecordTick(stats_, FILTER_OPERATION_TOTAL_TIME,
+             c_iter_stats.total_filter_time);
+  RecordDroppedKeys(c_iter_stats, &sub_compact->compaction_job_stats);
+  RecordCompactionIOStats();
+
+  if (status.ok() && cfd->IsDropped()) {
+    status =
+        Status::ColumnFamilyDropped("Column family dropped during compaction");
+  }
+  if ((status.ok() || status.IsColumnFamilyDropped()) &&
+      shutting_down_->load(std::memory_order_relaxed)) {
+    status = Status::ShutdownInProgress("Database shutdown");
+  }
+  if ((status.ok() || status.IsColumnFamilyDropped()) &&
+      (manual_compaction_paused_ &&
+       manual_compaction_paused_->load(std::memory_order_relaxed) > 0)) {
+    status = Status::Incomplete(Status::SubCode::kManualCompactionPaused);
+  }
+  if (status.ok()) {
+    status = input->status();
+  }
+  if (status.ok()) {
+    status = c_iter->status();
+  }
+
+  if (status.ok() && sub_compact->builder == nullptr &&
+      sub_compact->outputs.size() == 0 && !range_del_agg.IsEmpty()) {
+    // handle subcompaction containing only range deletions
+    status = OpenCompactionOutputFile(sub_compact);
+  }
+
+  // Call FinishCompactionOutputFile() even if status is not ok: it needs to
+  // close the output file.
+  if (sub_compact->builder != nullptr) {
+    CompactionIterationStats range_del_out_stats;
+    Status s = FinishCompactionOutputFile(status, sub_compact, &range_del_agg,
+                                          &range_del_out_stats);
+    if (!s.ok() && status.ok()) {
+      status = s;
+    }
+    RecordDroppedKeys(range_del_out_stats, &sub_compact->compaction_job_stats);
+  }
+
+  if (blob_file_builder) {
+    if (status.ok()) {
+      status = blob_file_builder->Finish();
+    } else {
+      blob_file_builder->Abandon();
+    }
+    blob_file_builder.reset();
+  }
+
+  sub_compact->compaction_job_stats.cpu_micros =
+      db_options_.clock->CPUNanos() / 1000 - prev_cpu_micros;
+
+  if (measure_io_stats_) {
+    sub_compact->compaction_job_stats.file_write_nanos +=
+        IOSTATS(write_nanos) - prev_write_nanos;
+    sub_compact->compaction_job_stats.file_fsync_nanos +=
+        IOSTATS(fsync_nanos) - prev_fsync_nanos;
+    sub_compact->compaction_job_stats.file_range_sync_nanos +=
+        IOSTATS(range_sync_nanos) - prev_range_sync_nanos;
+    sub_compact->compaction_job_stats.file_prepare_write_nanos +=
+        IOSTATS(prepare_write_nanos) - prev_prepare_write_nanos;
+    sub_compact->compaction_job_stats.cpu_micros -=
+        (IOSTATS(cpu_write_nanos) - prev_cpu_write_nanos +
+         IOSTATS(cpu_read_nanos) - prev_cpu_read_nanos) /
+        1000;
+    if (prev_perf_level != PerfLevel::kEnableTimeAndCPUTimeExceptForMutex) {
+      SetPerfLevel(prev_perf_level);
+    }
+  }
+#ifdef ROCKSDB_ASSERT_STATUS_CHECKED
+  if (!status.ok()) {
+    if (sub_compact->c_iter) {
+      sub_compact->c_iter->status().PermitUncheckedError();
+    }
+    if (input) {
+      input->status().PermitUncheckedError();
+    }
+  }
+#endif  // ROCKSDB_ASSERT_STATUS_CHECKED
+
+  sub_compact->c_iter.reset();
+  input.reset();
+  sub_compact->status = status;
+}
 
 void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   assert(sub_compact);
@@ -1782,7 +2101,7 @@ Status CompactionJob::InstallCompactionResults(
 
   // Add compaction inputs
   compaction->AddInputDeletions(edit);
-
+  
   for (const auto& sub_compact : compact_->sub_compact_states) {
     for (const auto& out : sub_compact.outputs) {
       edit->AddFile(compaction->output_level(), out.meta);
@@ -1900,6 +2219,14 @@ Status CompactionJob::OpenCompactionOutputFile(
     meta.oldest_ancester_time = oldest_ancester_time;
     meta.file_creation_time = current_time;
     meta.temperature = temperature;
+
+    //setting the endpoints for the op file
+
+    // meta.endpoint_list.clear();
+    // meta.endpoint_list.push_back(*(sub_compact->start));
+    // meta.endpoint_list.push_back(*(sub_compact->end));
+
+
     sub_compact->outputs.emplace_back(
         std::move(meta), cfd->internal_comparator(),
         /*enable_order_check=*/

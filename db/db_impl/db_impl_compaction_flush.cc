@@ -7,6 +7,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include <cinttypes>
+#include <iostream>
 
 #include "db/builder.h"
 #include "db/db_impl/db_impl.h"
@@ -3146,14 +3147,12 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
 
     NotifyOnCompactionBegin(c->column_family_data(), c.get(), status,
                             compaction_job_stats, job_context->job_id);
-    mutex_.Unlock();
+    // mutex_.Unlock();
     TEST_SYNC_POINT_CALLBACK(
         "DBImpl::BackgroundCompaction:NonTrivial:BeforeRun", nullptr);
     // Should handle erorr?
     compaction_job.Run().PermitUncheckedError();
     TEST_SYNC_POINT("DBImpl::BackgroundCompaction:NonTrivial:AfterRun");
-    mutex_.Lock();
-
     status = compaction_job.Install(*c->mutable_cf_options());
     io_s = compaction_job.io_status();
     if (status.ok()) {
@@ -3164,6 +3163,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     *made_progress = true;
     TEST_SYNC_POINT_CALLBACK("DBImpl::BackgroundCompaction:AfterCompaction",
                              c->column_family_data());
+    // mutex_.Lock();
   }
 
   if (status.ok() && !io_s.ok()) {

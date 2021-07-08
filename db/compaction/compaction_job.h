@@ -57,6 +57,15 @@ class Version;
 class VersionEdit;
 class VersionSet;
 
+
+struct RangeWithSize {
+  Range range;
+  uint64_t size;
+
+  RangeWithSize(const Slice& a, const Slice& b, uint64_t s = 0)
+      : range(a, b), size(s) {}
+};
+
 // CompactionJob is responsible for executing the compaction. Each (manual or
 // automated) compaction corresponds to a CompactionJob object, and usually
 // goes through the stages of `Prepare()`->`Run()`->`Install()`. CompactionJob
@@ -108,6 +117,9 @@ class CompactionJob {
   // Return the IO status
   IOStatus io_status() const { return io_status_; }
 
+  //return list of endpoints
+  std::vector<Slice> GetEndPointsList();
+
  protected:
   struct SubcompactionState;
   // CompactionJob state
@@ -122,6 +134,8 @@ class CompactionJob {
   // Call compaction filter. Then iterate through input and compact the
   // kv-pairs
   void ProcessKeyValueCompaction(SubcompactionState* sub_compact);
+
+  void ProcessKeyValueCompactionWithEndPoints(SubcompactionState* sub_compact, Slice& start, Slice& end);
 
   CompactionState* compact_;
   InternalStats::CompactionStats compaction_stats_;
@@ -211,6 +225,7 @@ class CompactionJob {
   bool measure_io_stats_;
   // Stores the Slices that designate the boundaries for each subcompaction
   std::vector<Slice> boundaries_;
+  std::vector<RangeWithSize> ranges;
   // Stores the approx size of keys covered in the range of each subcompaction
   std::vector<uint64_t> sizes_;
   Env::Priority thread_pri_;

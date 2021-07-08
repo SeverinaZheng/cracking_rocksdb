@@ -15,6 +15,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <iostream>
+
 #include "db/column_family.h"
 #include "file/filename.h"
 #include "logging/log_buffer.h"
@@ -360,6 +362,7 @@ Compaction* CompactionPicker::CompactFiles(
       GetCompressionOptions(mutable_cf_options, vstorage, output_level),
       compact_options.max_subcompactions,
       /* grandparents */ {}, true);
+  std::cout<<"Registering here in picker\n";
   RegisterCompaction(c);
   return c;
 }
