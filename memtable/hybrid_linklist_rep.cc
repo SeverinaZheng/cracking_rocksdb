@@ -43,7 +43,7 @@ struct BucketHeader {
                         const MemTableRep::KeyComparator& cmp,
                                 Allocator* allocator)
       : next(n), num_entries(count),endpoint_key(key),
-      skip_list(cmp, allocator),set_skip_list(false),rate(1000000){}
+      skip_list(cmp, allocator),set_skip_list(false),rate(2000000){}
 
   uint32_t GetNumEntries() const {
     return num_entries.load(std::memory_order_relaxed);
@@ -528,7 +528,7 @@ void HybridLinkListRep::RebuildEndpointList(std::vector<Slice> endpoints) {
     BucketHeader* header = nullptr;
     auto* mem2 = allocator_->AllocateAligned(sizeof(BucketHeader));
     Key k = endpoints[i].data();
-    endpoint_list_.emplace_back(k);    
+    //endpoint_list_.emplace_back(k);    
     header = new (mem2) BucketHeader(nullptr, 0,k,compare_,allocator_);
     buckets_[i].store(header, std::memory_order_relaxed);
   }
