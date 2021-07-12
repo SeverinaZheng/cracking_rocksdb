@@ -241,21 +241,21 @@ class HybridLinkListRep : public MemTableRep {
       if(endpoint == nullptr) return middle;
       auto diff = compare_(endpoint,slice);
       if ( diff == 0) {
-        printf("a %zu ",middle);
+        //printf("a %zu ",middle);
         return middle;}
       else if (diff > 0){
           if(middle == 0) {
-            printf("b %zu ",middle);
+            //printf("b %zu ",middle);
             return middle;}
           Key prev_endpoint = (reinterpret_cast<BucketHeader*>(buckets_[middle - 1].load(std::memory_order_acquire)))->GetEndPointKey();
         if (compare_(prev_endpoint,slice) < 0)  {
-          printf("c %zu ",middle);
+          //printf("c %zu ",middle);
           return middle;}
         else  high = middle - 1;
       }else
         low = middle + 1;
     }
-    printf("d %zu ",high);
+    //printf("d %zu ",high);
     return high;
 
   }
@@ -560,13 +560,13 @@ void HybridLinkListRep::RebuildEndpointList(std::vector<Slice> endpoints) {
   header = new (mem2) BucketHeader(nullptr, 0,nullptr,compare_,allocator_);
   buckets_[endpoint_num_].store(header, std::memory_order_relaxed);
   buckets_num_ = endpoint_num_;
-  /*
+  
   // test endpoints
   for (size_t i = 0 ; i <= endpoint_num_; i++){
      BucketHeader* headeri =  reinterpret_cast<BucketHeader*> (buckets_[i].load(std::memory_order_acquire));
      Key key_ = headeri->GetEndPointKey();
     printf("%s",key_);
-  }*/
+  }
 }
 
 bool HybridLinkListRep::isAdaptive(){return true;}
