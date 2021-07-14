@@ -43,7 +43,7 @@ struct BucketHeader {
                         const MemTableRep::KeyComparator& cmp,
                                 Allocator* allocator)
       : next(n), num_entries(count),
-      skip_list(cmp, allocator),set_skip_list(false),rate(2){
+      skip_list(cmp, allocator),set_skip_list(false),rate(10000){
         if(key != nullptr){
           auto* mem3= allocator->AllocateAligned(sizeof(char*));
           endpoint_key = new (mem3) char;
@@ -230,7 +230,7 @@ class HybridLinkListRep : public MemTableRep {
   Node* GetLinkListFirstNode(Pointer* first_next_pointer) const;
 
   //former GetHash
-  size_t FindRange(const Slice& slice) const {
+  size_t FindRange(const char* key) const {
     size_t low = 0;
     size_t high = buckets_num_;
     size_t middle ;
@@ -239,16 +239,17 @@ class HybridLinkListRep : public MemTableRep {
       BucketHeader* header =  reinterpret_cast<BucketHeader*> (buckets_[middle].load(std::memory_order_acquire));
       Key endpoint = header->GetEndPointKey();
       if(endpoint == nullptr) return middle;
-      auto diff = compare_(endpoint,slice);
+      auto diff = compare_(key,endpoint);
+      //printf("dif %d \n",diff);
       if ( diff == 0) {
         //printf("a %zu ",middle);
         return middle;}
-      else if (diff > 0){
+      else if (diff < 0){
           if(middle == 0) {
             //printf("b %zu ",middle);
             return middle;}
           Key prev_endpoint = (reinterpret_cast<BucketHeader*>(buckets_[middle - 1].load(std::memory_order_acquire)))->GetEndPointKey();
-        if (compare_(prev_endpoint,slice) < 0)  {
+        if (compare_(key,prev_endpoint) > 0)  {
           //printf("c %zu ",middle);
           return middle;}
         else  high = middle - 1;
@@ -264,8 +265,8 @@ class HybridLinkListRep : public MemTableRep {
     return static_cast<Pointer*>(buckets_[i].load(std::memory_order_acquire));
   }
 
-  Pointer* GetBucket(const Slice& slice) const {
-    return GetBucket(FindRange(slice));
+  Pointer* GetBucket(const char* x) const {
+    return GetBucket(FindRange(x));
   }
 
   bool Equal(const Slice& a, const Key& b) const {
@@ -510,8 +511,8 @@ HybridLinkListRep::HybridLinkListRep(
   auto* mem2 = allocator_->AllocateAligned(sizeof(BucketHeader));
   header = new (mem2) BucketHeader(nullptr, 0,nullptr,compare_,allocator_);
   buckets_[0].store(header, std::memory_order_relaxed);
-  auto* mem3 = allocator_->AllocateAligned(sizeof(char*) * 10);
-  endpoint_values_ = new (mem3) char*[10];
+  auto* mem3 = allocator_->AllocateAligned(sizeof(char*) * 10000);
+  endpoint_values_ = new (mem3) char*[10000];
 
 }
 
@@ -532,18 +533,18 @@ std::vector<Slice> HybridLinkListRep::GetEndpointList(){
 }
 
 void HybridLinkListRep::RebuildEndpointList(std::vector<Slice> endpoints) {
-  endpoint_num_ = endpoints.size();
-  assert(endpoint_num_ != 0);
-  char* mem = allocator_->AllocateAligned(sizeof(Pointer) * (endpoint_num_+1),
+  endpoint_num_ = 0;
+  char* mem = allocator_->AllocateAligned(sizeof(Pointer) * (endpoints.size()+1),
                                         huge_page_tlb_size_, logger_);
 
-  buckets_ = new (mem) Pointer[endpoint_num_+1];
+  buckets_ = new (mem) Pointer[endpoints.size()+1];
   MemtableSkipList sorted_endpoints(compare_,allocator_);
-  for (size_t i = 0; i < endpoint_num_; ++i) {
+  for (size_t i = 0; i < endpoints.size(); ++i) {
     Key k = endpoints[i].data();
     sorted_endpoints.Insert(k);
   }
   MemtableSkipList::Iterator iter(&sorted_endpoints);
+  endpoint_list_.clear();
   size_t p = 0;
   for (iter.SeekToFirst();iter.Valid();iter.Next()) {
     BucketHeader* header = nullptr;
@@ -558,15 +559,16 @@ void HybridLinkListRep::RebuildEndpointList(std::vector<Slice> endpoints) {
   BucketHeader* header = nullptr;
   auto* mem2 = allocator_->AllocateAligned(sizeof(BucketHeader));
   header = new (mem2) BucketHeader(nullptr, 0,nullptr,compare_,allocator_);
-  buckets_[endpoint_num_].store(header, std::memory_order_relaxed);
-  buckets_num_ = endpoint_num_;
+  buckets_[endpoints.size()].store(header, std::memory_order_relaxed);
+  buckets_num_ = endpoints.size();
   
+  /*
   // test endpoints
-  for (size_t i = 0 ; i <= endpoint_num_; i++){
+  for (size_t i = 0 ; i <= buckets_num_; i++){
      BucketHeader* headeri =  reinterpret_cast<BucketHeader*> (buckets_[i].load(std::memory_order_acquire));
      Key key_ = headeri->GetEndPointKey();
     printf("%s",key_);
-  }
+  }*/
 }
 
 bool HybridLinkListRep::isAdaptive(){return true;}
@@ -576,14 +578,14 @@ void HybridLinkListRep::Insert(KeyHandle handle) {
   //in order to get consistent with keys used in the get() function
   //the node's key will be raw and the key to find the buckets will 
   //be userkey
-  Slice internal_key = GetLengthPrefixedSlice(x->key);
+  //Slice internal_key = GetLengthPrefixedSlice(x->key);
   //auto transformed = transform_->Transform(ExtractUserKey(internal_key));
   //char* mem = allocator_->AllocateAligned(sizeof(Node) + strlen(transformed.data()));
   //Node* x = new (mem) Node();
   //x->key = key;
   x->NoBarrier_SetNext(nullptr);
 
-  auto& bucket = buckets_[FindRange(internal_key)];
+  auto& bucket = buckets_[FindRange(x->key+1)];
   Pointer* first_next_pointer =
       static_cast<Pointer*>(bucket.load(std::memory_order_relaxed));
 
@@ -645,7 +647,7 @@ KeyHandle HybridLinkListRep::Allocate(const size_t len, char** buf) {
 
 bool HybridLinkListRep::Contains(const char* key) const {
   Slice transformed = Slice(key);
-  auto bucket = GetBucket(transformed);
+  auto bucket = GetBucket(key);
   if (bucket == nullptr) {
     return false;
   }
@@ -662,18 +664,18 @@ size_t HybridLinkListRep::ApproximateMemoryUsage() {
 void HybridLinkListRep::Get(const LookupKey& k, void* callback_args,
                           bool (*callback_func)(void* arg, const char* entry)) {
   auto transformed = k.internal_key();
-  auto bucket = GetBucket(transformed);
+  auto bucket = GetBucket(transformed.data());
   BucketHeader* header = nullptr;
   header = reinterpret_cast<BucketHeader*>(bucket);
 
   auto* link_list_head = GetLinkListFirstNode(bucket);
 
-  if(rand() % (header->GetRate()) <= 1 && endpoint_num_ < 10){
+  if(rand() % (header->GetRate()) <= 1 && endpoint_num_ < 10000){
     auto* mem3= allocator_->AllocateAligned(sizeof(char*));
     endpoint_values_[endpoint_num_] = new (mem3) char;
     std::strcpy(endpoint_values_[endpoint_num_],transformed.data());
     Slice end = Slice(const_cast<const char*> (endpoint_values_[endpoint_num_]),
-                      transformed.size()-8);
+                      transformed.size());
     endpoint_list_.push_back(end);
     endpoint_num_++;
   }

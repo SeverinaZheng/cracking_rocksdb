@@ -246,8 +246,20 @@ inline bool operator!=(const Slice& x, const Slice& y) { return !(x == y); }
 
 inline int Slice::compare(const Slice& b) const {
   assert(data_ != nullptr && b.data_ != nullptr);
-  const size_t min_len = (size_ < b.size_) ? size_ : b.size_;
-  int r = memcmp(data_, b.data_, min_len);
+  /*const size_t min_len = (size_ < b.size_) ? size_ : b.size_;
+  int r = memcmp(data_, b.data_, min_len);*/
+  int first_a = data_[0];
+  int first_b = b.data_[0];
+  int r;
+  if(first_a >= 48 && first_a <=57 && first_b >= 48 && first_b <=57){
+    int num_a = std::stoi(data_);
+    int num_b = std::stoi(b.data_);
+    r = num_a-num_b;
+  }else{
+    const size_t min_len = (size_ < b.size_) ? size_ : b.size_;
+    r = memcmp(data_, b.data_, min_len);
+  }
+  
   if (r == 0) {
     if (size_ < b.size_)
       r = -1;

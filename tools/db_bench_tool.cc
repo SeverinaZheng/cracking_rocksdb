@@ -34,6 +34,8 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <string>
+
 
 #include "db/db_impl/db_impl.h"
 #include "db/malloc_stats.h"
@@ -2959,6 +2961,13 @@ class Benchmark {
     return Slice(key_guard->get(), key_size_);
   }
 
+  Slice AllocateKey(std::unique_ptr<const char[]>* key_guard, int size) {
+    char* data = new char[key_size_];
+    const char* const_data = data;
+    key_guard->reset(const_data);
+    return Slice(key_guard->get(), size);
+  }
+
   // Generate key according to the given specification and random number.
   // The resulting key will have the following format:
   //   - If keys_per_prefix_ is positive, extra trailing bytes are either cut
@@ -3002,6 +3011,28 @@ class Benchmark {
     }
 
     int bytes_to_fill = std::min(key_size_ - static_cast<int>(pos - start), 8);
+    std::string s;
+    if (port::kLittleEndian) {
+     s = std::to_string(static_cast<int>(v));
+     int length = static_cast<int>(s.length());
+     for (int i = 0; i < length; ++i) {
+        pos[i] = s[i];
+      }
+      pos[length] = '\0';
+    } else {
+      memcpy(pos, static_cast<void*>(&v), bytes_to_fill);
+    }
+    pos += s.length()+1;
+    if (key_size_ > pos - start) {
+      memset(pos, '0', key_size_ - (pos - start));
+    }
+  }
+
+  void GenerateKeyFromIntDiffLength(uint64_t v,Slice* key) {
+    char* start = const_cast<char*>(key->data());
+    char* pos = start;
+
+    int bytes_to_fill = std::min(key_size_ - static_cast<int>(pos - start), 8);
     if (port::kLittleEndian) {
       for (int i = 0; i < bytes_to_fill; ++i) {
         pos[i] = (v >> ((bytes_to_fill - i - 1) << 3)) & 0xFF;
@@ -3013,6 +3044,7 @@ class Benchmark {
     if (key_size_ > pos - start) {
       memset(pos, '0', key_size_ - (pos - start));
     }
+
   }
 
   void GenerateKeyFromIntForSeek(uint64_t v, int64_t num_keys, Slice* key) {
@@ -5443,18 +5475,22 @@ class Benchmark {
       DB* db = SelectDB(thread);
        
           long k;
-          if (FLAGS_YCSB_uniform_distribution){
+          /*if (FLAGS_YCSB_uniform_distribution){
             //Generate number from uniform distribution            
             k = thread->rand.Next() % FLAGS_num;
           } else { //default
             //Generate number from zipf distribution
             k = nextValue() % FLAGS_num;            
-          }
-          GenerateKeyFromInt(k, FLAGS_num, &key);
+          }*/
+          //Slice key = AllocateKey(&key_guard,k%100 + 9);
+          //GenerateKeyFromIntDiffLength(k, &key);
+          //GenerateKeyFromInt(k,FLAGS_num, &key);
 
           int next_op = thread->rand.Next() % 100;
           if (next_op < 50){
             //read
+            k = nextValue() % FLAGS_num;  
+            GenerateKeyFromInt(k,FLAGS_num, &key);
             Status s = db->Get(options, key, &value);
             if (!s.ok() && !s.IsNotFound()) {
               //fprintf(stderr, "k=%d; get error: %s\n", k, s.ToString().c_str());
@@ -5469,6 +5505,8 @@ class Benchmark {
             
           } else{
             //write
+            k = thread->rand.Next() % FLAGS_num;
+            GenerateKeyFromInt(k,FLAGS_num, &key);
             if (FLAGS_benchmark_write_rate_limit > 0) {
                 
                 thread->shared->write_rate_limiter->Request(
@@ -5533,7 +5571,9 @@ class Benchmark {
         //Generate number from zipf distribution
         k = nextValue() % FLAGS_num;            
       }
-      GenerateKeyFromInt(k, FLAGS_num, &key);
+      //Slice key = AllocateKey(&key_guard,k % 100 + 9);
+      //GenerateKeyFromIntDiffLength(k,&key);
+      GenerateKeyFromInt(k,FLAGS_num,&key);
 
       int next_op = thread->rand.Next() % 100;
       if (next_op < 95){
@@ -6701,7 +6741,7 @@ class Benchmark {
     // the number of iterations is the larger of read_ or write_
     while (!duration.Done(1)) {
       DB* db = SelectDB(thread);
-      GenerateKeyFromInt(thread->rand.Next() % 10, 10, &key);
+      GenerateKeyFromInt(thread->rand.Next() % FLAGS_num, FLAGS_num, &key);
       if (get_weight == 0 && put_weight == 0) {
         // one batch completed, reinitialize for next batch
         get_weight = FLAGS_readwritepercent;

@@ -38,7 +38,7 @@ int main() {
   s = db->Get(ReadOptions(), "???", &value);
   //assert(s.ok());
   assert(value == "1");
-
+  /*
   s = db->Put(WriteOptions(), "22", "1");
   // get value
   s = db->Get(ReadOptions(), "22", &value);
@@ -68,6 +68,34 @@ int main() {
   s = db->Put(WriteOptions(), "11111111111", "1");
   // get value
   s = db->Get(ReadOptions(), "11111111111", &value);
+
+  */
+  s = db->Put(WriteOptions(), "2", "1");
+  // get value
+  s = db->Get(ReadOptions(), "2", &value);
+
+
+  s = db->Put(WriteOptions(), "5", "1");
+  // get value
+  s = db->Get(ReadOptions(), "5", &value);
+//
+  s = db->Put(WriteOptions(), "4", "555");
+  std::string value_5;
+  // get value
+  s = db->Get(ReadOptions(), "4", &value_5);
+
+   s = db->Put(WriteOptions(), "6", "1");
+  // get value
+  s = db->Get(ReadOptions(), "6", &value);
+
+ s = db->Put(WriteOptions(), "8", "1");
+  // get value
+  s = db->Get(ReadOptions(), "8", &value);
+
+   s = db->Put(WriteOptions(), "9", "1");
+  // get value
+  s = db->Get(ReadOptions(), "9", &value);
+
   FlushOptions no_wait;
   no_wait.wait = false;
   no_wait.allow_write_stall = true;
@@ -108,22 +136,22 @@ int main() {
   s = db->Get(ReadOptions(), "key3", &value_k3);
   assert(value_k3 == "key3");
 
-  s = db->Put(WriteOptions(), "key4", "key4");
+  s = db->Put(WriteOptions(), "dafadf", "key4");
   std::string value_k4;
   // get value
-  s = db->Get(ReadOptions(), "key4", &value_k4);
+  s = db->Get(ReadOptions(), "dafadf", &value_k4);
   assert(value_k4 == "key4");
 
-  s = db->Put(WriteOptions(), "key5", "key5");
+  s = db->Put(WriteOptions(), "k", "key5");
   std::string value_k5;
   // get value
-  s = db->Get(ReadOptions(), "key5", &value_k5);
+  s = db->Get(ReadOptions(), "k", &value_k5);
   assert(value_k5 == "key5");
 
-  s = db->Put(WriteOptions(), "key6", "key6");
+  s = db->Put(WriteOptions(), "::::", "key6");
   std::string value_k6;
   // get value
-  s = db->Get(ReadOptions(), "key6", &value_k6);
+  s = db->Get(ReadOptions(), "::::", &value_k6);
   assert(value_k6 == "key6");
 
 

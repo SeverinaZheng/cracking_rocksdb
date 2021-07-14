@@ -239,7 +239,9 @@ class HashLinkListRep : public MemTableRep {
 
   bool KeyIsAfterNode(const Slice& internal_key, const Node* n) const {
     // nullptr n is considered infinite
-    return (n != nullptr) && (compare_(n->key, internal_key) < 0);
+    auto diff = compare_(n->key, internal_key);
+    printf(" diff is %d \n",diff);
+    return (n != nullptr) && (diff < 0);
   }
 
   bool KeyIsAfterNode(const Key& key, const Node* n) const {
