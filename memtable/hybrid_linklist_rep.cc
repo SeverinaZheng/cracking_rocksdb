@@ -602,6 +602,7 @@ void HybridLinkListRep::Insert(KeyHandle handle) {
          (x->key));
   }
     // Need to insert to the unsorted linked list at the first non-header element
+  /*
   if(header->GetNumEntries() > 0){
     if (header->GetNumEntries() == threshold_use_skiplist_){
       header->SetSkipList();
@@ -636,6 +637,12 @@ void HybridLinkListRep::Insert(KeyHandle handle) {
     //endpoint_num_++;
     //uint32_t nums = header->GetNumEntries();
     //Key k = header->GetEndPointKey();
+    */
+   if(header->GetNumEntries() ==0){
+      header->SetSkipList();
+   }
+   header->skip_list.Insert(x->key);
+   header->IncNumEntries();
 }
 
 KeyHandle HybridLinkListRep::Allocate(const size_t len, char** buf) {
