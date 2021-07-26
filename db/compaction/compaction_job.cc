@@ -367,23 +367,25 @@ CompactionJob::CompactionJob(
 }
 
 std::vector<Slice> CompactionJob::GetEndPointsList(){
-    const std::vector<CompactionInputFiles>& inputs =
-        *(compact_->compaction->inputs());
-
-    std::vector<Slice> endpoints_list;
-    for(auto files_per_level : inputs)
+  const std::vector<CompactionInputFiles>& inputs =
+      *(compact_->compaction->inputs());
+  std::vector<Slice> endpoints_list;
+  for(auto files_per_level : inputs)
+  {
+    for(auto files : files_per_level.files)
     {
-      for(auto files : files_per_level.files)
+      std::vector<Slice> endpoints=files->endpoint_list;
+      for(size_t k=0;k<endpoints.size();k++)
       {
-        std::vector<Slice> endpoints=files->endpoint_list;
-        for(size_t k=0;k<endpoints.size();k++)
+        if(endpoints[k].data_!=nullptr)
         {
           endpoints_list.push_back(endpoints[k]);
         }
       }
     }
-    return endpoints_list;
   }
+  return endpoints_list;
+}
 
 CompactionJob::~CompactionJob() {
   assert(compact_ == nullptr);
@@ -447,32 +449,25 @@ void CompactionJob::Prepare() {
       c->column_family_data()->CalculateSSTWriteHint(c->output_level());
   bottommost_level_ = c->bottommost_level();
 
-  if (c->ShouldFormSubcompactions(GetEndPointsList())) {
-    {
-      // StopWatch sw(db_options_.clock, stats_, SUBCOMPACTION_SETUP_TIME);
-      GenSubcompactionBoundaries();
-    }
-    assert(sizes_.size() == boundaries_.size() + 1);
+  GenSubcompactionBoundaries();
 
-    for (size_t i = 1; i < boundaries_.size(); i++) {
-      Slice* start = i == 0 ? nullptr : &boundaries_[i - 1];
-      Slice* end = i == boundaries_.size() ? nullptr : &boundaries_[i];
-      compact_->sub_compact_states.emplace_back(c, start, end, sizes_[i]);
-    }
-    RecordInHistogram(stats_, NUM_SUBCOMPACTIONS_SCHEDULED,
-                      compact_->sub_compact_states.size());
-  } else {
-    constexpr Slice* start = nullptr;
-    constexpr Slice* end = nullptr;
-    constexpr uint64_t size = 0;
+  assert(sizes_.size() == boundaries_.size() + 1);
 
-    compact_->sub_compact_states.emplace_back(c, start, end, size);
+  //adding to subcompactions
+  for (size_t i = 1; i < boundaries_.size(); i++) 
+  {
+    Slice* start = i == 0 ? nullptr : &boundaries_[i - 1];
+    Slice* end = i == boundaries_.size() ? nullptr : &boundaries_[i];
+    compact_->sub_compact_states.emplace_back(c, start, end, sizes_[i]);
   }
+  RecordInHistogram(stats_, NUM_SUBCOMPACTIONS_SCHEDULED, compact_->sub_compact_states.size());
+
 }
 
 void CompactionJob::GenSubcompactionBoundaries() {
   auto* c = compact_->compaction;
   auto* cfd = c->column_family_data();
+
   const Comparator* cfd_comparator = cfd->user_comparator();
 
   int start_lvl = c->start_level();
@@ -499,13 +494,6 @@ void CompactionJob::GenSubcompactionBoundaries() {
       }
     }
   }
-  else
-  {
-    for(size_t i=0;i<endpoints_list.size();i++)
-    {
-      endpoints_list[i].remove_prefix(1);
-    }
-  }
 
   //ensure the endpoints are sorted since they will be a mix of endpoints from different files from different levels
   std::sort(endpoints_list.begin(), endpoints_list.end(),
@@ -516,10 +504,9 @@ void CompactionJob::GenSubcompactionBoundaries() {
   // Remove duplicated entries from endpoints
   endpoints_list.erase(
       std::unique(endpoints_list.begin(), endpoints_list.end(),
-                  [cfd_comparator](const Slice& a, const Slice& b) -> bool {
-                    return cfd_comparator->Compare(ExtractUserKey(a),
-                                                   ExtractUserKey(b)) == 0;
-                  }),
+      [cfd_comparator](const Slice& a, const Slice& b) -> bool {
+        return cfd_comparator->Compare(ExtractUserKey(a),ExtractUserKey(b)) == 0;
+      }), 
       endpoints_list.end());
 
   // Combine consecutive pairs of endpoints into ranges with an approximate
@@ -551,7 +538,6 @@ void CompactionJob::GenSubcompactionBoundaries() {
       sum += size;
     }
   }
-
   uint64_t size;
 
   // add each range to the subcompaction
@@ -587,18 +573,14 @@ Status CompactionJob::Run() {
   std::vector<port::Thread> thread_pool;
   thread_pool.reserve(num_threads - 1);
 
-  for (size_t i = 0; i < compact_->sub_compact_states.size(); i++) {
-    thread_pool.emplace_back(&CompactionJob::ProcessKeyValueCompaction, this,
-                             &compact_->sub_compact_states[i]);
-  }
-
-  // Always schedule the first subcompaction (whether or not there are also
-  // others) in the current thread to be efficient with resources
-
-  // GenSubcompactionBoundaries();
-  // for (size_t i = 0; i < ranges.size(); i++) {
-  //   ProcessKeyValueCompactionWithEndPoints(&compact_->sub_compact_states[i], ranges[i].range.start, ranges[i].range.limit);
+  // for (size_t i = 0; i < compact_->sub_compact_states.size(); i++) {
+  //   thread_pool.emplace_back(&CompactionJob::ProcessKeyValueCompaction, this,
+  //                            &compact_->sub_compact_states[i]);
   // }
+
+  for (size_t i = 0; i < ranges.size(); i++) {
+    ProcessKeyValueCompactionWithEndPoints(&compact_->sub_compact_states[i], ranges[i].range.start, ranges[i].range.limit);
+  }
 
   // Wait for all other threads (if there are any) to finish execution
   // for (auto& thread : thread_pool) {
@@ -1044,8 +1026,6 @@ void CompactionJob::ProcessKeyValueCompactionWithEndPoints(SubcompactionState* s
 
   assert(sub_compact);
   assert(compact_);
-
-  //get the exact key by removing the additional 8 bit prefix
 
   uint64_t prev_cpu_micros = db_options_.clock->CPUNanos() / 1000;
 
