@@ -165,6 +165,7 @@ void LevelCompactionBuilder::PickFileToCompact(
 
 void LevelCompactionBuilder::SetupInitialFiles() {
   // Find the compactions by size on all levels.
+  std::cout<<"setupinitalfiles\n";
   bool skipped_l0_to_base = false;
   for (int i = 0; i < compaction_picker_->NumberLevels() - 1; i++) {
     start_level_score_ = vstorage_->CompactionScore(i);
@@ -181,6 +182,17 @@ void LevelCompactionBuilder::SetupInitialFiles() {
           (start_level_ == 0) ? vstorage_->base_level() : start_level_ + 1;
       if (PickFileToCompact()) {
         // found the compaction!
+
+        std::cout<<"ip files in setupinitial files\n";  
+        for(auto files: start_level_inputs_.files)
+        {
+            std::cout<<"no of ep = "<<files->endpoint_list.size()<<"\n";
+            for(auto ep : files->endpoint_list)
+            {
+              std::cout<<ep.data_<<" ";
+            }
+            std::cout<<"\n";
+        }
         if (start_level_ == 0) {
           // L0 score = `num L0 files` / `level0_file_num_compaction_trigger`
           compaction_reason_ = CompactionReason::kLevelL0FilesNum;
@@ -215,6 +227,7 @@ void LevelCompactionBuilder::SetupInitialFiles() {
     }
   }
   if (!start_level_inputs_.empty()) {
+    std::cout<<"returning from setupinital\n";
     return;
   }
 
@@ -252,6 +265,7 @@ void LevelCompactionBuilder::SetupInitialFiles() {
 }
 
 bool LevelCompactionBuilder::SetupOtherL0FilesIfNeeded() {
+  std::cout<<"setup other l0 files if needed\n";
   if (start_level_ == 0 && output_level_ != 0) {
     return compaction_picker_->GetOverlappingL0Files(
         vstorage_, &start_level_inputs_, output_level_, &parent_index_);
@@ -263,6 +277,19 @@ bool LevelCompactionBuilder::SetupOtherInputsIfNeeded() {
   // Setup input files from output level. For output to L0, we only compact
   // spans of files that do not interact with any pending compactions, so don't
   // need to consider other levels.
+  std::cout<<"setup\n";
+
+  std::cout<<"ip files in level\n";  
+  for(auto files: start_level_inputs_.files)
+  {
+      std::cout<<"no of ep = "<<files->endpoint_list.size()<<"\n";
+      for(auto ep : files->endpoint_list)
+      {
+        std::cout<<ep.data_<<" ";
+      }
+      std::cout<<"\n";
+  }
+
   if (output_level_ != 0) {
     output_level_inputs_.level = output_level_;
     if (!compaction_picker_->SetupOtherInputs(
@@ -299,10 +326,12 @@ bool LevelCompactionBuilder::SetupOtherInputsIfNeeded() {
 Compaction* LevelCompactionBuilder::PickCompaction() {
   // Pick up the first file to start compaction. It may have been extended
   // to a clean cut.
+  std::cout<<"pickcompaction\n";
   SetupInitialFiles();
   if (start_level_inputs_.empty()) {
     return nullptr;
   }
+  std::cout<<"no of files ="<<start_level_inputs_.files.size()<<"\n";
   assert(start_level_ >= 0 && output_level_ >= 0);
 
   // If it is a L0 -> base level compaction, we need to set up other L0
@@ -411,6 +440,7 @@ bool LevelCompactionBuilder::PickFileToCompact() {
   // than one concurrent compactions at this level. This
   // could be made better by looking at key-ranges that are
   // being compacted at level 0.
+  std::cout<<"picking file to compact\n";
   if (start_level_ == 0 &&
       !compaction_picker_->level0_compactions_in_progress()->empty()) {
     TEST_SYNC_POINT("LevelCompactionPicker::PickCompactionBySize:0");
@@ -476,7 +506,19 @@ bool LevelCompactionBuilder::PickFileToCompact() {
 
   // store where to start the iteration in the next call to PickCompaction
   vstorage_->SetNextCompactionIndex(start_level_, cmp_idx);
+  std::cout<<"no of ip files="<<start_level_inputs_.size()<<"\n";
+  std::cout<<"setup\n";
 
+  std::cout<<"ip files in pickfiletocompact\n";  
+  for(auto files: start_level_inputs_.files)
+  {
+      std::cout<<"no of ep = "<<files->endpoint_list.size()<<"\n";
+      for(auto ep : files->endpoint_list)
+      {
+        std::cout<<ep.data_<<" ";
+      }
+      std::cout<<"\n";
+  }
   return start_level_inputs_.size() > 0;
 }
 
@@ -506,6 +548,7 @@ Compaction* LevelCompactionPicker::PickCompaction(
   LevelCompactionBuilder builder(cf_name, vstorage, earliest_mem_seqno, this,
                                  log_buffer, mutable_cf_options, ioptions_,
                                  mutable_db_options);
+                                 std::cout<<"created instance of levelcompbuilder\n";
   return builder.PickCompaction();
 }
 }  // namespace ROCKSDB_NAMESPACE

@@ -43,7 +43,7 @@ struct BucketHeader {
                         const MemTableRep::KeyComparator& cmp,
                                 Allocator* allocator)
       : next(n), num_entries(count),
-      skip_list(cmp, allocator),set_skip_list(false),rate(10000){
+      skip_list(cmp, allocator),set_skip_list(false),rate(1){
         if(key != nullptr){
           auto* mem3= allocator->AllocateAligned(sizeof(char*));
           endpoint_key = new (mem3) char;

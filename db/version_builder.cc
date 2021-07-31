@@ -22,6 +22,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 #include "db/blob/blob_file_meta.h"
 #include "db/dbformat.h"
@@ -200,6 +201,15 @@ class VersionBuilder::Rep {
         version_set_(version_set),
         num_levels_(base_vstorage->num_levels()),
         has_invalid_levels_(false) {
+          std::cout<<"rep created\n";
+          for(auto files : base_vstorage->LevelFiles(0))
+          {
+            for(auto ep : files->endpoint_list)
+            {
+              std::cout<<ep.data_<<" ";
+            }
+            std::cout<<"\n";
+          }
     assert(ioptions_);
 
     levels_ = new LevelState[num_levels_];
@@ -873,6 +883,16 @@ class VersionBuilder::Rep {
       // Merge the set of added files with the set of pre-existing files.
       // Drop any deleted files.  Store the result in *v.
       const auto& base_files = base_vstorage_->LevelFiles(level);
+      // std::cout<<"no of pre existing files="<<base_files.size()<<"\n";
+      for(auto files : base_files)
+      {
+        std::cout<<"no of ep in this preexisting file ="<<files->endpoint_list.size()<<"\n";
+        for(auto ep : files->endpoint_list)
+        {
+          std::cout<<ep.data_<<" ";
+        }
+        std::cout<<"\n";
+      }
       const auto& unordered_added_files = levels_[level].added_files;
       vstorage->Reserve(level,
                         base_files.size() + unordered_added_files.size());
@@ -903,8 +923,10 @@ class VersionBuilder::Rep {
       while (added_iter != added_end || base_iter != base_end) {
         if (base_iter == base_end ||
                 (added_iter != added_end && cmp(*added_iter, *base_iter))) {
+                  std::cout<<"calling maybe add using added_iter\n";
           MaybeAddFile(vstorage, level, *added_iter++);
         } else {
+          std::cout<<"calling maybe add using base_iter\n";
           MaybeAddFile(vstorage, level, *base_iter++);
         }
       }
@@ -1019,6 +1041,12 @@ class VersionBuilder::Rep {
   }
 
   void MaybeAddFile(VersionStorageInfo* vstorage, int level, FileMetaData* f) {
+    std::cout<<"no of ep in maybe add file="<<f->endpoint_list.size()<<"\n";
+    for(auto ep : f->endpoint_list)
+    {
+      std::cout<<ep.data_<<" ";
+    }
+    std::cout<<"\n";
     const uint64_t file_number = f->fd.GetNumber();
 
     const auto& level_state = levels_[level];
@@ -1038,7 +1066,9 @@ class VersionBuilder::Rep {
       if (add_it != add_files.end() && add_it->second != f) {
         vstorage->RemoveCurrentStats(f);
       } else {
+        std::cout<<"calling add to vset\n";
         vstorage->AddFile(level, f);
+        std::cout<<"done adding to vset\n";
       }
     }
   }
@@ -1050,7 +1080,7 @@ VersionBuilder::VersionBuilder(const FileOptions& file_options,
                                VersionStorageInfo* base_vstorage,
                                VersionSet* version_set)
     : rep_(new Rep(file_options, ioptions, table_cache, base_vstorage,
-                   version_set)) {}
+                   version_set)) {std::cout<<"rep created\n";}
 
 VersionBuilder::~VersionBuilder() = default;
 

@@ -453,6 +453,17 @@ bool CompactionPicker::SetupOtherInputs(
     return true;
   }
 
+  std::cout<<"ip files in picker\n";  
+  for(auto files: inputs->files)
+  {
+      std::cout<<"no of ep = "<<files->endpoint_list.size()<<"\n";
+      for(auto ep : files->endpoint_list)
+      {
+        std::cout<<ep.data_<<" ";
+      }
+      std::cout<<"\n";
+  }
+
   // For now, we only support merging two levels, start level and output level.
   // We need to assert other levels are empty.
   for (int l = input_level + 1; l < output_level; l++) {
@@ -569,6 +580,7 @@ Compaction* CompactionPicker::CompactRange(
     const CompactRangeOptions& compact_range_options, const InternalKey* begin,
     const InternalKey* end, InternalKey** compaction_end, bool* manual_conflict,
     uint64_t max_file_num_to_ignore) {
+      std::cout<<"compact range\n";
   // CompactionPickerFIFO has its own implementation of compact range
   assert(ioptions_.compaction_style != kCompactionStyleFIFO);
 
@@ -984,6 +996,8 @@ Status CompactionPicker::SanitizeCompactionInputFilesForAllLevels(
       }
     }
   }
+  std::cout<<"smallest ="<<smallestkey<<"\n";
+  std::cout<<"largest="<<largestkey<<"\n";
   if (RangeOverlapWithCompaction(smallestkey, largestkey, output_level)) {
     return Status::Aborted(
         "A running compaction is writing to the same output level in an "
@@ -1146,12 +1160,17 @@ bool CompactionPicker::GetOverlappingL0Files(
   // Two level 0 compaction won't run at the same time, so don't need to worry
   // about files on level 0 being compacted.
   assert(level0_compactions_in_progress()->empty());
+  std::cout<<"get overlappingl0 files\n";
+  std::cout<<"size of start level ip="<<start_level_inputs->files.size()<<"\n";
   InternalKey smallest, largest;
   GetRange(*start_level_inputs, &smallest, &largest);
+  std::cout<<"smallest="<<(smallest.user_key()).data_<<"\n";
+  std::cout<<"largest="<<(largest.user_key()).data_<<"\n";
   // Note that the next call will discard the file we placed in
   // c->inputs_[0] earlier and replace it with an overlapping set
   // which will include the picked file.
   start_level_inputs->files.clear();
+  std::cout<<"going into getoverlapping ip\n";
   vstorage->GetOverlappingInputs(0, &smallest, &largest,
                                  &(start_level_inputs->files));
 
@@ -1163,6 +1182,7 @@ bool CompactionPicker::GetOverlappingL0Files(
                           parent_index)) {
     return false;
   }
+  std::cout<<"size of start level ip after getRange and getoverlapping ip="<<start_level_inputs->files.size()<<"\n";
   assert(!start_level_inputs->files.empty());
 
   return true;

@@ -10,7 +10,7 @@
 #include "db/flush_job.h"
 
 #include <cinttypes>
-
+#include <iostream>
 #include <algorithm>
 #include <vector>
 
@@ -198,6 +198,14 @@ void FlushJob::PickMemTable() {
 
 Status FlushJob::Run(LogsWithPrepTracker* prep_tracker,
                      FileMetaData* file_meta) {
+                       std::cout<<"Flush Run\n";
+
+                       std::cout<<"no of ep in run "<<file_meta->endpoint_list.size()<<"\n";
+                       for(auto ep : file_meta->endpoint_list)
+                       {
+                         std::cout<<ep.data_<<" ";
+                       }
+                       std::cout<<"\n";
   TEST_SYNC_POINT("FlushJob::Start");
   db_mutex_->AssertHeld();
   assert(pick_memtable_called);
@@ -245,10 +253,12 @@ Status FlushJob::Run(LogsWithPrepTracker* prep_tracker,
     TEST_SYNC_POINT("FlushJob::InstallResults");
     // Replace immutable memtable with the generated Table
     IOStatus tmp_io_s;
+    std::cout<<"tryinstallmemflushres\n";
     s = cfd_->imm()->TryInstallMemtableFlushResults(
         cfd_, mutable_cf_options_, mems_, prep_tracker, versions_, db_mutex_,
         meta_.fd.GetNumber(), &job_context_->memtables_to_free, db_directory_,
         log_buffer_, &committed_flush_jobs_info_, &tmp_io_s);
+    std::cout<<"done tryinstallmemflushres\n";
     if (!tmp_io_s.ok()) {
       io_status_ = tmp_io_s;
     }
@@ -307,6 +317,7 @@ void FlushJob::Cancel() {
 }
 
 Status FlushJob::WriteLevel0Table() {
+  std::cout<<"writing level0table\n";
   AutoThreadOperationStageUpdater stage_updater(
       ThreadStatus::STAGE_FLUSH_WRITE_L0);
   db_mutex_->AssertHeld();
@@ -466,6 +477,12 @@ Status FlushJob::WriteLevel0Table() {
       keyList = m->GetEndpointList();
       //m->RebuildEndpointList();
       meta_.UpdateEndpointList(keyList);
+      std::cout<<"no of ep in l0 update="<<meta_.endpoint_list.size()<<"\n";
+      for(auto ep : meta_.endpoint_list)
+      {
+        std::cout<<ep.data_<<" ";
+      }
+      std::cout<<"\n";
     }
   }
 
@@ -475,6 +492,7 @@ Status FlushJob::WriteLevel0Table() {
     // threads could be concurrently producing compacted files for
     // that key range.
     // Add file to L0
+    std::cout<<"Calling Edit\n";
     edit_->AddFile(0 /* level */, meta_.fd.GetNumber(), meta_.fd.GetPathId(),
                    meta_.fd.GetFileSize(), meta_.smallest, meta_.largest,
                    meta_.fd.smallest_seqno, meta_.fd.largest_seqno,
@@ -482,7 +500,7 @@ Status FlushJob::WriteLevel0Table() {
                    meta_.oldest_ancester_time, meta_.file_creation_time,
                    meta_.file_checksum, meta_.file_checksum_func_name,
                    meta_.endpoint_list);
-
+    std::cout<<"done calling edit\n";
     edit_->SetBlobFileAdditions(std::move(blob_file_additions));
   }
 #ifndef ROCKSDB_LITE
@@ -513,6 +531,7 @@ Status FlushJob::WriteLevel0Table() {
       InternalStats::BYTES_FLUSHED,
       stats.bytes_written + stats.bytes_written_blob);
   RecordFlushIOStats();
+  std::cout<<"returning from write l0 table\n";
   return s;
 }
 

@@ -307,6 +307,16 @@ Status DBImpl::FlushMemTableToOutputFile(
             &new_bg_error);
         error_handler_.SetBGError(new_bg_error, BackgroundErrorReason::kFlush);
       }
+      std::vector<Slice> endpoint_list= file_meta.endpoint_list;
+      std::cout<<"no of ep in sst ="<<endpoint_list.size()<<"\n";
+      for(size_t k=0;k<endpoint_list.size();k++)
+      {
+        if(endpoint_list[k].data_!=nullptr)
+        {
+          std::cout<<"key="<<endpoint_list[k].data_<<",";
+        }
+      }
+      std::cout<<"\n";
     }
 #endif  // ROCKSDB_LITE
   }
@@ -1830,6 +1840,7 @@ Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
       // retry resume, it is possible that in some CFs,
       // cfd->imm()->NumNotFlushed() = 0. In this case, so no flush request will
       // be created and scheduled, status::OK() will be returned.
+     
       s = SwitchMemtable(cfd, &context);
     }
     const uint64_t flush_memtable_id = port::kMaxUint64;
@@ -1918,6 +1929,7 @@ Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
         cfds, flush_memtable_ids,
         (flush_reason == FlushReason::kErrorRecovery ||
          flush_reason == FlushReason::kErrorRecoveryRetryFlush));
+
     InstrumentedMutexLock lock_guard(&mutex_);
     for (auto* tmp_cfd : cfds) {
       tmp_cfd->UnrefAndTryDelete();
@@ -2119,6 +2131,7 @@ Status DBImpl::WaitForFlushMemTables(
     const autovector<ColumnFamilyData*>& cfds,
     const autovector<const uint64_t*>& flush_memtable_ids,
     bool resuming_from_bg_err) {
+
   int num = static_cast<int>(cfds.size());
   // Wait until the compaction completes
   InstrumentedMutexLock l(&mutex_);
@@ -2138,7 +2151,6 @@ Status DBImpl::WaitForFlushMemTables(
         error_handler_.GetBGError().severity() < Status::Severity::kHardError) {
       return error_handler_.GetBGError();
     }
-
     // Number of column families that have been dropped.
     int num_dropped = 0;
     // Number of column families that have finished flush.
@@ -2503,7 +2515,6 @@ Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context,
                                LogBuffer* log_buffer, FlushReason* reason,
                                Env::Priority thread_pri) {
   mutex_.AssertHeld();
-
   Status status;
   *reason = FlushReason::kOthers;
   // If BG work is stopped due to an error, but a recovery is in progress,
@@ -2598,7 +2609,6 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
         pending_outputs_inserted_elem(new std::list<uint64_t>::iterator(
             CaptureCurrentFileNumberInPendingOutputs()));
     FlushReason reason;
-
     Status s = BackgroundFlush(&made_progress, &job_context, &log_buffer,
                                &reason, thread_pri);
     if (!s.ok() && !s.IsShutdownInProgress() && !s.IsColumnFamilyDropped() &&

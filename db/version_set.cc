@@ -2795,6 +2795,13 @@ bool CompareCompensatedSizeDescending(const Fsize& first, const Fsize& second) {
 } // anonymous namespace
 
 void VersionStorageInfo::AddFile(int level, FileMetaData* f) {
+  std::cout<<"Adding File in version set\n";
+  std::cout<<"no of ep in this file="<<f->endpoint_list.size();
+  for(auto ep : f->endpoint_list)
+  {
+    std::cout<<ep.data_<<"\n";
+  }
+  std::cout<<"\n";
   auto& level_files = files_[level];
   level_files.push_back(f);
 
@@ -3099,13 +3106,13 @@ void VersionStorageInfo::GetOverlappingInputs(
     // this level is empty, no overlapping inputs
     return;
   }
-
   inputs->clear();
   if (file_index) {
     *file_index = -1;
   }
   const Comparator* user_cmp = user_comparator_;
   if (level > 0) {
+    //change this
     GetOverlappingInputsRangeBinarySearch(level, begin, end, inputs, hint_index,
                                           file_index, false, next_smallest);
     return;
@@ -3128,6 +3135,7 @@ void VersionStorageInfo::GetOverlappingInputs(
   // index stores the file index need to check.
   std::list<size_t> index;
   for (size_t i = 0; i < level_files_brief_[level].num_files; i++) {
+    std::cout<<"i="<<i<<"\n";
     index.emplace_back(i);
   }
 
@@ -3138,6 +3146,7 @@ void VersionStorageInfo::GetOverlappingInputs(
       FdWithKeyRange* f = &(level_files_brief_[level].files[*iter]);
       const Slice file_start = ExtractUserKey(f->smallest_key);
       const Slice file_limit = ExtractUserKey(f->largest_key);
+      std::cout<<"smallest = "<<file_start.data_<<" largest = "<<file_limit.data_<<"\n";
       if (begin != nullptr &&
           user_cmp->CompareWithoutTimestamp(file_limit, user_begin) < 0) {
         // "f" is completely before specified range; skip it
@@ -3148,7 +3157,16 @@ void VersionStorageInfo::GetOverlappingInputs(
         iter++;
       } else {
         // if overlap
+        std::cout<<"overlap\n";
         inputs->emplace_back(files_[level][*iter]);
+        
+        FileMetaData* file= files_[level][*iter];
+        std::cout<<file->endpoint_list.size()<<"\n";
+        for(auto ep : file->endpoint_list)
+        {
+          std::cout<<ep.data_<<" ";
+        }
+        std::cout<<"\n";
         found_overlapping_file = true;
         // record the first file index.
         if (file_index && *file_index == -1) {
@@ -3878,6 +3896,7 @@ Status VersionSet::ProcessManifestWrites(
     std::deque<ManifestWriter>& writers, InstrumentedMutex* mu,
     FSDirectory* db_directory, bool new_descriptor_log,
     const ColumnFamilyOptions* new_cf_options) {
+      std::cout<<"inside process manifest\n";
   mu->AssertHeld();
   assert(!writers.empty());
   ManifestWriter& first_writer = writers.front();
@@ -3962,6 +3981,18 @@ Status VersionSet::ProcessManifestWrites(
                                 current_version_number_++);
           versions.push_back(version);
           mutable_cf_options_ptrs.push_back(&last_writer->mutable_cf_options);
+          
+          const std::vector<FileMetaData *> meta_= last_writer->cfd->current()->storage_info()->LevelFiles(0);
+          std::cout<<"building baseReference\n";
+          for(auto file : meta_)
+          {
+            for(auto ep : file->endpoint_list)
+            {
+              std::cout<<ep.data_<<" ";
+            }
+            std::cout<<"\n";
+          }
+
           builder_guards.emplace_back(
               new BaseReferencedVersionBuilder(last_writer->cfd));
           builder = builder_guards.back()->version_builder();
@@ -3996,6 +4027,7 @@ Status VersionSet::ProcessManifestWrites(
       assert(!builder_guards.empty() &&
              builder_guards.size() == versions.size());
       auto* builder = builder_guards[i]->version_builder();
+      std::cout<<"calling saveto\n";
       Status s = builder->SaveTo(versions[i]->storage_info());
       if (!s.ok()) {
         // free up the allocated memory
@@ -4471,7 +4503,7 @@ Status VersionSet::LogAndApply(
     }
     return Status::ColumnFamilyDropped();
   }
-
+  std::cout<<"calling process manifest writes\n";
   return ProcessManifestWrites(writers, mu, db_directory, new_descriptor_log,
                                new_cf_options);
 }
