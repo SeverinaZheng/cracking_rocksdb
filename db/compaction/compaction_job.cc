@@ -375,7 +375,7 @@ std::vector<Slice> CompactionJob::GetEndPointsList(){
     for(auto files : files_per_level.files)
     {
       std::vector<Slice> endpoints=files->endpoint_list;
-      std::cout<<"no of ep in this file="<<endpoints.size()<<"\n";
+      /*std::cout<<"no of ep in this file="<<endpoints.size()<<"\n";
       for(size_t k=0;k<endpoints.size();k++)
       {
         if(endpoints[k].data_!=nullptr)
@@ -384,7 +384,7 @@ std::vector<Slice> CompactionJob::GetEndPointsList(){
           std::cout<<"key="<<endpoints[k].data_<<"\n";
           endpoints_list.push_back(endpoints[k]);
         }
-      }
+      }*/
     }
   }
   return endpoints_list;

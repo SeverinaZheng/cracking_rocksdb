@@ -239,7 +239,7 @@ struct FileMetaData {
   //vector will always be size of 0
   void UpdateEndpointList(std::vector<Slice> endpoint_list_){
     endpoint_list.assign(endpoint_list_.begin(), endpoint_list_.end());
-    std::cout<<"updated ep list\n";
+    /*std::cout<<"updated ep list\n";
     for(size_t k=0;k<endpoint_list.size();k++)
     {
       if(endpoint_list[k].data_!=nullptr)
@@ -247,7 +247,7 @@ struct FileMetaData {
         std::cout<<"key="<<endpoint_list[k].data_<<",";
       }
     }
-    std::cout<<"\n";
+    std::cout<<"\n";*/
   }
 
   // REQUIRED: Keys must be given to the function in sorted order (it expects

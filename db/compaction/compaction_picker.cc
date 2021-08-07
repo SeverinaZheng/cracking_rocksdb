@@ -453,7 +453,7 @@ bool CompactionPicker::SetupOtherInputs(
     return true;
   }
 
-  std::cout<<"ip files in picker\n";  
+  /*std::cout<<"ip files in picker\n";  
   for(auto files: inputs->files)
   {
       std::cout<<"no of ep = "<<files->endpoint_list.size()<<"\n";
@@ -462,7 +462,7 @@ bool CompactionPicker::SetupOtherInputs(
         std::cout<<ep.data_<<" ";
       }
       std::cout<<"\n";
-  }
+  }*/
 
   // For now, we only support merging two levels, start level and output level.
   // We need to assert other levels are empty.

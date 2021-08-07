@@ -201,7 +201,7 @@ class VersionBuilder::Rep {
         version_set_(version_set),
         num_levels_(base_vstorage->num_levels()),
         has_invalid_levels_(false) {
-          std::cout<<"rep created\n";
+          /*std::cout<<"rep created\n";
           for(auto files : base_vstorage->LevelFiles(0))
           {
             for(auto ep : files->endpoint_list)
@@ -209,7 +209,7 @@ class VersionBuilder::Rep {
               std::cout<<ep.data_<<" ";
             }
             std::cout<<"\n";
-          }
+          }*/
     assert(ioptions_);
 
     levels_ = new LevelState[num_levels_];
@@ -884,7 +884,7 @@ class VersionBuilder::Rep {
       // Drop any deleted files.  Store the result in *v.
       const auto& base_files = base_vstorage_->LevelFiles(level);
       // std::cout<<"no of pre existing files="<<base_files.size()<<"\n";
-      for(auto files : base_files)
+      /*for(auto files : base_files)
       {
         std::cout<<"no of ep in this preexisting file ="<<files->endpoint_list.size()<<"\n";
         for(auto ep : files->endpoint_list)
@@ -892,7 +892,7 @@ class VersionBuilder::Rep {
           std::cout<<ep.data_<<" ";
         }
         std::cout<<"\n";
-      }
+      }*/
       const auto& unordered_added_files = levels_[level].added_files;
       vstorage->Reserve(level,
                         base_files.size() + unordered_added_files.size());
@@ -1041,12 +1041,12 @@ class VersionBuilder::Rep {
   }
 
   void MaybeAddFile(VersionStorageInfo* vstorage, int level, FileMetaData* f) {
-    std::cout<<"no of ep in maybe add file="<<f->endpoint_list.size()<<"\n";
+    /*std::cout<<"no of ep in maybe add file="<<f->endpoint_list.size()<<"\n";
     for(auto ep : f->endpoint_list)
     {
       std::cout<<ep.data_<<" ";
     }
-    std::cout<<"\n";
+    std::cout<<"\n";*/
     const uint64_t file_number = f->fd.GetNumber();
 
     const auto& level_state = levels_[level];

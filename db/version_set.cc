@@ -2795,13 +2795,13 @@ bool CompareCompensatedSizeDescending(const Fsize& first, const Fsize& second) {
 } // anonymous namespace
 
 void VersionStorageInfo::AddFile(int level, FileMetaData* f) {
-  std::cout<<"Adding File in version set\n";
+  /*std::cout<<"Adding File in version set\n";
   std::cout<<"no of ep in this file="<<f->endpoint_list.size();
   for(auto ep : f->endpoint_list)
   {
     std::cout<<ep.data_<<"\n";
   }
-  std::cout<<"\n";
+  std::cout<<"\n";*/
   auto& level_files = files_[level];
   level_files.push_back(f);
 
@@ -3160,13 +3160,13 @@ void VersionStorageInfo::GetOverlappingInputs(
         std::cout<<"overlap\n";
         inputs->emplace_back(files_[level][*iter]);
         
-        FileMetaData* file= files_[level][*iter];
+        /*FileMetaData* file= files_[level][*iter];
         std::cout<<file->endpoint_list.size()<<"\n";
         for(auto ep : file->endpoint_list)
         {
           std::cout<<ep.data_<<" ";
         }
-        std::cout<<"\n";
+        std::cout<<"\n";*/
         found_overlapping_file = true;
         // record the first file index.
         if (file_index && *file_index == -1) {
@@ -3983,7 +3983,7 @@ Status VersionSet::ProcessManifestWrites(
           mutable_cf_options_ptrs.push_back(&last_writer->mutable_cf_options);
           
           const std::vector<FileMetaData *> meta_= last_writer->cfd->current()->storage_info()->LevelFiles(0);
-          std::cout<<"building baseReference\n";
+          /*std::cout<<"building baseReference\n";
           for(auto file : meta_)
           {
             for(auto ep : file->endpoint_list)
@@ -3991,7 +3991,7 @@ Status VersionSet::ProcessManifestWrites(
               std::cout<<ep.data_<<" ";
             }
             std::cout<<"\n";
-          }
+          }*/
 
           builder_guards.emplace_back(
               new BaseReferencedVersionBuilder(last_writer->cfd));

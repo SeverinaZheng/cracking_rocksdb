@@ -183,7 +183,7 @@ void LevelCompactionBuilder::SetupInitialFiles() {
       if (PickFileToCompact()) {
         // found the compaction!
 
-        std::cout<<"ip files in setupinitial files\n";  
+        /*std::cout<<"ip files in setupinitial files\n";  
         for(auto files: start_level_inputs_.files)
         {
             std::cout<<"no of ep = "<<files->endpoint_list.size()<<"\n";
@@ -192,7 +192,7 @@ void LevelCompactionBuilder::SetupInitialFiles() {
               std::cout<<ep.data_<<" ";
             }
             std::cout<<"\n";
-        }
+        }*/
         if (start_level_ == 0) {
           // L0 score = `num L0 files` / `level0_file_num_compaction_trigger`
           compaction_reason_ = CompactionReason::kLevelL0FilesNum;
@@ -277,7 +277,7 @@ bool LevelCompactionBuilder::SetupOtherInputsIfNeeded() {
   // Setup input files from output level. For output to L0, we only compact
   // spans of files that do not interact with any pending compactions, so don't
   // need to consider other levels.
-  std::cout<<"setup\n";
+  /*std::cout<<"setup\n";
 
   std::cout<<"ip files in level\n";  
   for(auto files: start_level_inputs_.files)
@@ -288,7 +288,7 @@ bool LevelCompactionBuilder::SetupOtherInputsIfNeeded() {
         std::cout<<ep.data_<<" ";
       }
       std::cout<<"\n";
-  }
+  }*/
 
   if (output_level_ != 0) {
     output_level_inputs_.level = output_level_;
@@ -506,7 +506,7 @@ bool LevelCompactionBuilder::PickFileToCompact() {
 
   // store where to start the iteration in the next call to PickCompaction
   vstorage_->SetNextCompactionIndex(start_level_, cmp_idx);
-  std::cout<<"no of ip files="<<start_level_inputs_.size()<<"\n";
+  /*std::cout<<"no of ip files="<<start_level_inputs_.size()<<"\n";
   std::cout<<"setup\n";
 
   std::cout<<"ip files in pickfiletocompact\n";  
@@ -518,7 +518,7 @@ bool LevelCompactionBuilder::PickFileToCompact() {
         std::cout<<ep.data_<<" ";
       }
       std::cout<<"\n";
-  }
+  }*/
   return start_level_inputs_.size() > 0;
 }
 

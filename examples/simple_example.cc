@@ -16,7 +16,7 @@ using namespace ROCKSDB_NAMESPACE;
 #if defined(OS_WIN)
 std::string kDBPath = "C:\\Windows\\TEMP\\rocksdb_simple_example";
 #else
-std::string kDBPath = "/tmp/rocksdb_simple_example";
+std::string kDBPath = "/tmp/rocksdb_simple_example2";
 #endif
 
 int main() {
@@ -115,6 +115,8 @@ int main() {
   s = db->Put(WriteOptions(), "11999", "9");
   s = db->Get(ReadOptions(), "11999", &value);
   assert(value == "9");
+
+  db->Flush(no_wait);
 
   delete db;
 

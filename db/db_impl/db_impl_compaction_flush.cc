@@ -308,7 +308,7 @@ Status DBImpl::FlushMemTableToOutputFile(
         error_handler_.SetBGError(new_bg_error, BackgroundErrorReason::kFlush);
       }
       std::vector<Slice> endpoint_list= file_meta.endpoint_list;
-      std::cout<<"no of ep in sst ="<<endpoint_list.size()<<"\n";
+      /*std::cout<<"no of ep in sst ="<<endpoint_list.size()<<"\n";
       for(size_t k=0;k<endpoint_list.size();k++)
       {
         if(endpoint_list[k].data_!=nullptr)
@@ -316,7 +316,7 @@ Status DBImpl::FlushMemTableToOutputFile(
           std::cout<<"key="<<endpoint_list[k].data_<<",";
         }
       }
-      std::cout<<"\n";
+      std::cout<<"\n";*/
     }
 #endif  // ROCKSDB_LITE
   }

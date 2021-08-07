@@ -198,14 +198,14 @@ void FlushJob::PickMemTable() {
 
 Status FlushJob::Run(LogsWithPrepTracker* prep_tracker,
                      FileMetaData* file_meta) {
-                       std::cout<<"Flush Run\n";
+                       /*std::cout<<"Flush Run\n";
 
                        std::cout<<"no of ep in run "<<file_meta->endpoint_list.size()<<"\n";
                        for(auto ep : file_meta->endpoint_list)
                        {
                          std::cout<<ep.data_<<" ";
                        }
-                       std::cout<<"\n";
+                       std::cout<<"\n";*/
   TEST_SYNC_POINT("FlushJob::Start");
   db_mutex_->AssertHeld();
   assert(pick_memtable_called);
@@ -477,12 +477,12 @@ Status FlushJob::WriteLevel0Table() {
       keyList = m->GetEndpointList();
       //m->RebuildEndpointList();
       meta_.UpdateEndpointList(keyList);
-      std::cout<<"no of ep in l0 update="<<meta_.endpoint_list.size()<<"\n";
+      /*std::cout<<"no of ep in l0 update="<<meta_.endpoint_list.size()<<"\n";
       for(auto ep : meta_.endpoint_list)
       {
         std::cout<<ep.data_<<" ";
       }
-      std::cout<<"\n";
+      std::cout<<"\n";*/
     }
   }
 
